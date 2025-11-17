@@ -1,29 +1,28 @@
-import fs from "fs";
-import os from "os";
-import path from "path";
-
-const CONFIG_PATH = path.join(os.homedir(), ".blog-mcp-config.json");
-
 export interface Config {
 	tokens?: Record<string, string>; // platform → token
 }
 
-export function loadConfig(): Config {
+const CONFIG_KEY = "blog-mcp-config";
+
+export async function loadConfig(kv: KVNamespace): Promise<Config> {
 	try {
-		const raw = fs.readFileSync(CONFIG_PATH, "utf8");
+		const raw = await kv.get(CONFIG_KEY);
+		if (!raw) {
+			return { tokens: {} };
+		}
 		return JSON.parse(raw);
 	} catch {
 		return { tokens: {} };
 	}
 }
 
-export function saveConfig(config: Config) {
+export async function saveConfig(config: Config, kv: KVNamespace): Promise<void> {
 	const finalConfig: Config = {
 		tokens: {
 			...(config.tokens || {}),
 		},
 	};
 
-	fs.writeFileSync(CONFIG_PATH, JSON.stringify(finalConfig, null, 2), "utf8");
+	await kv.put(CONFIG_KEY, JSON.stringify(finalConfig, null, 2));
 }
 
