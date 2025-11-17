@@ -86,7 +86,7 @@ export class MyMCP extends McpAgent {
         } catch (err: any) {
           return {
             content: [
-              { type: "text", text: `❌ KV error: ${err.message}\n\nDebug info:\n${JSON.stringify(status, null, 2)}` }
+              { type: "text", text: ` KV error: ${err.message}\n\nDebug info:\n${JSON.stringify(status, null, 2)}` }
             ]
           };
         }
@@ -109,7 +109,7 @@ export class MyMCP extends McpAgent {
             content: [
               { 
                 type: "text", 
-                text: "❌ Error: KV namespace not configured.\n\nTry calling the 'debugKV' tool first to see what's wrong.\n\nMake sure your wrangler.jsonc has:\n\"binding\": \"BlogMCP\"" 
+                text: " Error: KV namespace not configured.\n\nTry calling the 'debugKV' tool first to see what's wrong.\n\nMake sure your wrangler.jsonc has:\n\"binding\": \"BlogMCP\"" 
               }
             ]
           };
@@ -132,7 +132,7 @@ export class MyMCP extends McpAgent {
           console.error("[setPlatformToken] Error:", err);
           return {
             content: [
-              { type: "text", text: `❌ Error saving token: ${err.message}` }
+              { type: "text", text: ` Error saving token: ${err.message}` }
             ]
           };
         }
@@ -156,7 +156,7 @@ export class MyMCP extends McpAgent {
             content: [
               { 
                 type: "text", 
-                text: "❌ Error: KV namespace not configured.\n\nTry calling 'debugKV' tool first to check status." 
+                text: "Error: KV namespace not configured.\n\nTry calling 'debugKV' tool first to check status." 
               }
             ]
           };
@@ -221,7 +221,7 @@ export class MyMCP extends McpAgent {
           console.error("[publishPost] Error:", err);
           return {
             content: [
-              { type: "text", text: `❌ Error: ${err.message}` }
+              { type: "text", text: ` Error: ${err.message}` }
             ]
           };
         }
