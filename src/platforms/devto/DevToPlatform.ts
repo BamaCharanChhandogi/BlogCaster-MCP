@@ -3,19 +3,22 @@ import { postToDevto } from "./client.js";
 
 export class DevToPlatform implements BlogPlatform {
 	async validateToken(token: string): Promise<boolean> {
-		// We can call a simple endpoint to verify token
-		try {
-			const res = await fetch("https://dev.to/api/articles/me", {
-				method: "GET",
-				headers: {
-					"api-key": token,
-				},
-			});
-			return res.ok;
-		} catch {
-			return false;
-		}
-	}
+    try {
+        const res = await fetch("https://dev.to/api/articles/me", {
+            method: "GET",
+            headers: {
+                "api-key": token,
+                "Accept": "application/json",
+                "User-Agent": "MyApp/1.0"
+            },
+        });
+        return res.ok;
+    } catch (err) {
+        console.error("Validate token error:", err);
+        return false;
+    }
+}
+
 
 	async publishPost(token: string, input: PostInput): Promise<PublishResult> {
 		const data = await postToDevto(

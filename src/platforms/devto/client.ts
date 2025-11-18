@@ -12,6 +12,7 @@ export async function postToDevto(
 		headers: {
 			"Content-Type": "application/json",
 			"api-key": apiKey,
+			"User-Agent": "MyApp/1.0"
 		},
 		body: JSON.stringify({
 			article: {
