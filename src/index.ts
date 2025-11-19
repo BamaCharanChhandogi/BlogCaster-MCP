@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { PlatformManager } from "./publisher/PlatformManager.js";
 import { loadConfigFromStorage, saveConfigToStorage } from "./config.js";
+import {demoHtml} from "../public/demo.js";
 
 export class MyMCP extends McpAgent {
   server = new McpServer({
@@ -147,7 +148,14 @@ export class MyMCP extends McpAgent {
 export default {
   fetch(request: Request, env: any, ctx: ExecutionContext) {
     const url = new URL(request.url);
-
+    if(url.pathname === "/") {
+      return new Response(demoHtml, {
+        headers: {
+          'Content-Type': 'text/html',
+          'Cache-Control': 'public, max-age=3600'
+        }
+      });
+    }
     if (url.pathname === "/sse" || url.pathname === "/sse/message") {
       return MyMCP.serveSSE("/sse").fetch(request, env, ctx);
     }
