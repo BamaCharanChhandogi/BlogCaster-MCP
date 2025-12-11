@@ -4,6 +4,8 @@ import {
 	createDraft,
 	publishDraft,
 	getPublicationId,
+	getAllBlogs,
+	deletePublicationStory,
 } from "./client.js";
 
 export class HashnodePlatform implements BlogPlatform {
@@ -18,6 +20,18 @@ export class HashnodePlatform implements BlogPlatform {
 		}
 	}
 
+	async getAllBlogs(
+		token: string,
+	): Promise<{ id?: string; url: string; slug?: string; }[]> { 
+		const fetchPublicationCountQueryLimit = 50;
+		const posts = await getAllBlogs(token, fetchPublicationCountQueryLimit);
+		return posts.map((p: { id: string; url: string; title: string; slug?: string; }) => ({
+			id: p.id,
+			url: p.url,
+			slug: p.slug,
+			title: p.title,
+		}));
+	}
 	async publishPost(
 		token: string,
 		input: PostInput,
@@ -40,6 +54,13 @@ export class HashnodePlatform implements BlogPlatform {
 			url: post.url,
 			publishedAt: post.publishedAt,
 		};
+	}
+
+	async deletePost(token: string, postId: string): Promise<void> {
+		// postId is expected to be the slug (preferred). Fall back to the provided value.
+		const publicationId = await getPublicationId(token);
+		if (!publicationId) throw new Error("No Hashnode publication found.");
+		await deletePublicationStory(token, publicationId, postId);
 	}
 }
 
