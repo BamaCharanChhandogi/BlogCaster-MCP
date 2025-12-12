@@ -1,73 +1,18 @@
-# 🚀 BlogCaster MCP — Publish Your Blog Everywhere With One Command
+# 🚀 BlogCaster MCP — Your Blog Ecosystem, One MCP Server
 
-BlogCaster MCP lets you publish a single Markdown post to **multiple blog platforms at once**, including:
+Cloud-hosted MCP server that lets you **publish, list, and delete posts across multiple blogging platforms** from any MCP-enabled client (Claude Desktop, Cursor/Cline, etc.). No local installs — just point your client at the URL. More management tools are on the way (updates, richer metadata, platform expansions).
 
-- Hashnode
-- Dev.to  
-- (More platforms coming soon)
-
-It runs as a **cloud-hosted MCP server**, so you don't install anything.  
-Just connect it to **Claude Desktop**, **Cursor**, or any MCP-enabled tool.
-
----
-
-# ✨ What BlogCaster MCP Does
-
-You can talk to an AI and say:
-
-> "Publish this blog post to Hashnode and Dev.to."
-
-And BlogCaster MCP will:
-
-1. Ask for your tokens securely  
-2. Store them in Cloudflare KV  
-3. Publish your post to all selected platforms  
-4. Return links to the published posts  
-
-This is *true* **Publish Once → Everywhere** for bloggers and developers.
-
----
-
-# 🌐 MCP Server URL
-
-Your BlogCaster MCP endpoint:
+## MCP Endpoint
 
 ```
-https://blogcaster-mcp.rrpb2580.workers.dev
+https://blogcaster-mcp.rrpb2580.workers.dev/mcp
 ```
 
-Replace `<your-account>` with your Cloudflare account prefix.
+Replace `blogcaster-mcp.rrpb2580` with your Worker URL if you self-host.
 
----
+## Connect from MCP clients
 
-# 🛠 Connecting BlogCaster MCP to Claude Desktop
-
-1. Open Claude Desktop  
-2. Go to **Settings → Developer → MCP Servers**  
-3. Add the following config:
-
-```json
-{
-  "mcpServers": {
-    "blogcaster": {
-      "command": "mcp-remote",
-      "args": [
-        "https://blogcaster-mcp.<your-account>.workers.dev/mcp"
-      ]
-    }
-  }
-}
-```
-
-Restart Claude Desktop
-
-Claude will now detect BlogCaster MCP automatically
-
----
-
-## Exact MCP Servers JSON
-
-Use the exact JSON below if your tool requires `npx` to launch the remote MCP client. Copy this block as-is into your MCP config file:
+### Claude Desktop
 
 ```json
 {
@@ -80,151 +25,82 @@ Use the exact JSON below if your tool requires `npx` to launch the remote MCP cl
 }
 ```
 
-## 🛠 Connecting to Cursor (or Cline)
-
-Add this to Cursor's MCP config:
+### Cursor / Cline
 
 ```json
 {
   "blogcaster": {
-    "url": "https://blogcaster-mcp.<your-account>.workers.dev/mcp"
+    "url": "https://blogcaster-mcp.rrpb2580.workers.dev/mcp"
   }
 }
 ```
 
-Cursor will reload MCP integrations on restart.
+Restart the client after saving the config.
 
----
+## Tools you can call
 
-# 🔑 Step 1 — Add Your Platform Tokens
+- `setPlatformToken(platform, token)` — store per-platform auth.
+- `publishPost(title, contentMarkdown, platforms, coverImageURL?)` — publish to one or many blogs.
+- `getBlogs(platforms)` — list recent posts per platform.
+- `deletePost(platforms, postId)` — delete by ID on one or many platforms.
 
-Before publishing to any platform, run these tool commands inside Claude/Cursor:
+All tokens and state stay in Durable Object storage per user/instance. Update/edit tools are planned next.
 
-## Hashnode
+## Quickstart flow
 
-```javascript
-setPlatformToken(
-  platform: "hashnode",
-  token: "YOUR_HASHNODE_API_TOKEN"
-)
-```
+1) Save tokens  
+   - Hashnode: `setPlatformToken("hashnode", "<HASHNODE_API_TOKEN>")`  
+   - Dev.to: `setPlatformToken("devto", "<DEVTO_API_KEY>")`  
+   - WordPress (JSON token):
+     - Self-hosted + app password:
+       ```json
+       {
+         "siteBaseUrl": "https://your-site.com",
+         "username": "admin",
+         "appPassword": "xxxx xxxx xxxx xxxx"
+       }
+       ```
+     - WordPress.com OAuth:
+       ```json
+       { "site": "yoursite.wordpress.com", "token": "<oauth_access_token>" }
+       ```
+   - Then run `setPlatformToken("wordpress", "<stringified JSON above>")`
 
-## Dev.to
-
-```javascript
-setPlatformToken(
-  platform: "devto",
-  token: "YOUR_DEVTO_API_KEY"
-)
-```
-
-💡 Tokens are securely stored in Cloudflare KV and never shown again.
-
----
-
-# 📝 Step 2 — Publish Your First Blog Post
-
-Now you can publish a blog instantly:
+2) Publish a post
 
 ```javascript
 publishPost(
   title: "My First BlogCaster Demo",
-  contentMarkdown: "# Hello World\nThis was published using BlogCaster MCP!",
-  platforms: ["hashnode", "devto"]
+  contentMarkdown: "# Hello World\nPublished via MCP!",
+  platforms: ["hashnode", "devto", "wordpress"],
+  coverImageURL: "https://example.com/cover.jpg"
 )
 ```
 
-BlogCaster will:
-
-- Validate all tokens
-- Publish to each platform
-- Return a JSON list of results
-
-Example output:
-
-```json
-[
-  {
-    "platform": "hashnode",
-    "success": true,
-    "result": {
-      "id": "123",
-      "url": "https://yourblog.hashnode.dev/my-post",
-      "slug": "my-post"
-    }
-  },
-  {
-    "platform": "devto",
-    "success": true,
-    "result": {
-      "id": 987,
-      "url": "https://dev.to/yourname/my-post"
-    }
-  }
-]
-```
-
----
-
-# ✨ Advanced Usage
-
-## Publish to only one platform
+3) List posts
 
 ```javascript
-publishPost(
-  title: "Hashnode Only",
-  contentMarkdown: "Hello!",
-  platforms: ["hashnode"]
-)
+getBlogs({ platforms: ["hashnode", "devto", "wordpress"] })
 ```
 
-## Publish to multiple platforms
+4) Delete a post by ID
 
 ```javascript
-publishPost(
-  title: "Full Sync",
-  contentMarkdown: "This goes everywhere!",
-  platforms: ["hashnode", "devto"]
-)
+deletePost({ platforms: ["devto", "wordpress"], postId: "12345" })
 ```
 
-## Change the token for a platform
+## Platform support
 
-```javascript
-setPlatformToken(
-  platform: "devto",
-  token: "NEW_TOKEN"
-)
-```
+| Platform   | Status | Notes |
+|------------|--------|-------|
+| Hashnode   | ✅     | Cover images ignored (API limitation) |
+| Dev.to     | ✅     | Cover image URL supported |
+| WordPress  | ✅     | Supports self-hosted + WordPress.com |
+| Medium     | 🔜     | Planned |
 
----
+## FAQ
 
-# 🔍 Supported Platforms
-
-| Platform | Status |
-|----------|--------|
-| Hashnode | ✅ Fully supported |
-| Dev.to | ✅ Fully supported |
-| Ghost | 🔜 Coming |
-| Medium | 🔜 Coming |
-| WordPress | 🔜 Coming |
-
----
-
-# ❓ FAQ
-
-**Do I need to install anything?**  
-No. BlogCaster MCP runs fully in the cloud.
-
-**Where are my tokens stored?**  
-In Cloudflare KV, secured and isolated per user.
-
-**Can I add more platforms?**  
-Yes — more are coming, and you can request or add your own.
-
-**Does BlogCaster ever see my post text?**  
-Only to publish it to your selected platforms. No data is stored.
-
----
-
-# ❤️ Thanks for Using BlogCaster MCP
+- **Do I install anything?** No — everything runs on Cloudflare Workers.  
+- **Where are tokens stored?** Durable Object storage scoped per user instance.  
+- **Can I self-host?** Yes, deploy the Worker and point your MCP client to your URL.  
+- **Does BlogCaster store my posts?** Only temporarily to publish; no retention.
