@@ -4,6 +4,7 @@ import { z } from "zod";
 import { PlatformManager } from "./publisher/PlatformManager.js";
 import { loadConfigFromStorage, saveConfigToStorage } from "./config.js";
 import {demoHtml} from "../public/demo.js";
+import { platform } from "os";
 
 export class MyMCP extends McpAgent {
   server = new McpServer({
@@ -42,6 +43,29 @@ export class MyMCP extends McpAgent {
           };
         }
 
+        // For WordPress require JSON string token so non-devs get clear guidance up-front.
+        const wordpressGuidance =
+          'WordPress token must be JSON string. Examples: ' +
+          '{"siteBaseUrl":"https://your-site.com","username":"user","appPassword":"app-pass"} ' +
+          'or {"site":"yoursite.wordpress.com","token":"<oauth_access_token>"}';
+
+        if (platform.toLowerCase() === "wordpress") {
+          try {
+            const parsed = JSON.parse(token);
+            const hasBasic = parsed.siteBaseUrl && parsed.username && parsed.appPassword;
+            const hasWpCom = parsed.site && (parsed.token || parsed.accessToken);
+            if (!hasBasic && !hasWpCom) {
+              throw new Error("Missing required WordPress fields.");
+            }
+          } catch (err: any) {
+            return {
+              content: [
+                { type: "text", text: `Invalid WordPress token. ${wordpressGuidance}` }
+              ]
+            };
+          }
+        }
+
         try {
           const config = await loadConfigFromStorage(this.doState.storage);
           config.tokens = config.tokens || {};
@@ -62,7 +86,150 @@ export class MyMCP extends McpAgent {
         }
       }
     );
+    
+    // get all blogs for a platform
+    this.server.tool(
+      "getBlogs",
+      "Retrieve all blogs for a specified platform",
+      {
+        platforms: z.array(z.string()).describe("List of platforms to publish to (e.g., ['hashnode', 'devto'])"),
+      },
+      async ({platforms}) =>{
+         if (!this.doState?.storage) {
+          return {
+            content: [
+              { type: "text", text: " Error: Durable Object storage not available." }
+            ]
+          };
+        }
+        try{
+          const config = await loadConfigFromStorage(this.doState.storage);
+          console.log(this.doState.storage);
+          console.log(config);
+          config.tokens = config.tokens || {};
+          const result: any[] = [];
+					for (const platformName of platforms) {
+						const token = config.tokens[platformName];
+						if (!token) {
+							result.push({
+								platform: platformName,
+								error: "Token missing, Use setPlatformToken first",
+							});
+							continue;
+						}
 
+						try {
+							const platform = PlatformManager.getPlatform(platformName as any);
+							const isValid = await platform.validateToken(token);
+							if (!isValid) {
+								result.push({
+									platform: platformName,
+									error:
+										platformName === "wordpress"
+											? 'WordPress token invalid. Use JSON string: {"siteBaseUrl":"https://your-site.com","username":"user","appPassword":"app-pass"} or {"site":"yoursite.wordpress.com","token":"<oauth_access_token>"}'
+											: "Invalid token",
+								});
+								continue;
+							}
+							const blogs = await platform.getAllBlogs(token);
+							result.push({
+								platform: platformName,
+								success: true,
+								blogs: blogs,
+							});
+						} catch (err: any) {
+							result.push({
+								platform: platformName,
+								error: err.message,
+							});
+						}
+					}
+          return {
+            content:[
+              {type: "text", text: JSON.stringify(result, null, 2)}
+            ]
+          }
+        }
+        catch(err:any){
+          return {
+            content:[
+              {type: "text", text: `Error: ${err.message}`}
+            ]
+          }
+        }
+      }
+    )
+    // delete post for a platform
+    this.server.tool(
+      "deletePost",
+      {
+        platforms: z.array(z.string()).describe("List of platforms to delete from (e.g., ['devto'])"),
+        postId: z.string().describe("Platform-specific post/article ID"),
+      },
+      async ({ platforms, postId }) => {
+        if (!this.doState?.storage) {
+          return {
+            content: [
+              { type: "text", text: " Error: Durable Object storage not available." }
+            ]
+          };
+        }
+        try {
+          const config = await loadConfigFromStorage(this.doState.storage);
+          config.tokens = config.tokens || {};
+          const result: any[] = [];
+
+					for (const platformName of platforms) {
+						const token = config.tokens[platformName];
+						if (!token) {
+							result.push({
+								platform: platformName,
+								error: "Token missing, Use setPlatformToken first",
+							});
+							continue;
+						}
+
+						try {
+							const platform = PlatformManager.getPlatform(platformName as any);
+							const isValid = await platform.validateToken(token);
+							if (!isValid) {
+								result.push({
+									platform: platformName,
+									error:
+										platformName === "wordpress"
+											? 'WordPress token invalid. Use JSON string: {"siteBaseUrl":"https://your-site.com","username":"user","appPassword":"app-pass"} or {"site":"yoursite.wordpress.com","token":"<oauth_access_token>"}'
+											: "Invalid token",
+								});
+								continue;
+							}
+
+							await platform.deletePost(token, postId);
+							result.push({
+								platform: platformName,
+								success: true,
+							});
+						} catch (err: any) {
+							result.push({
+								platform: platformName,
+								error: err.message,
+							});
+						}
+					}
+
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(result, null, 2) }
+            ]
+          };
+        } catch (err: any) {
+          return {
+            content: [
+              { type: "text", text: `Error: ${err.message}` }
+            ]
+          };
+        }
+      }
+    );
     // Publish blog post to selected platforms
     this.server.tool(
       "publishPost",
@@ -88,56 +255,60 @@ export class MyMCP extends McpAgent {
 
           const results: any[] = [];
 
-          for (const platformName of platforms) {
-            const token = config.tokens[platformName];
+					for (const platformName of platforms) {
+						const token = config.tokens[platformName];
 
-            if (!token) {
-              results.push({
-                platform: platformName,
-                error: `Token missing. Use setPlatformToken first.`
-              });
-              continue;
-            }
+						if (!token) {
+							results.push({
+								platform: platformName,
+								error: `Token missing. Use setPlatformToken first.`,
+							});
+							continue;
+						}
 
-            try {
-              const platform = PlatformManager.getPlatform(platformName as any);
+						try {
+							const platform = PlatformManager.getPlatform(platformName as any);
 
-              if (platform.validateToken) {
-                const ok = await platform.validateToken(token);
-                if (!ok) {
-                  results.push({
-                    platform: platformName,
-                    error: "Invalid token"
-                  });
-                  continue;
-                }
-              }
+							if (platform.validateToken) {
+								const ok = await platform.validateToken(token);
+								if (!ok) {
+									results.push({
+										platform: platformName,
+										error:
+											platformName === "wordpress"
+												? 'WordPress token invalid. Use JSON string: {"siteBaseUrl":"https://your-site.com","username":"user","appPassword":"app-pass"} or {"site":"yoursite.wordpress.com","token":"<oauth_access_token>"}'
+												: "Invalid token",
+									});
+									continue;
+								}
+							}
 
-              const result = await platform.publishPost(token, {
-                title,
-                contentMarkdown,
-                coverImageURL
-              });
+							const result = await platform.publishPost(token, {
+								title,
+								contentMarkdown,
+								coverImageURL,
+							});
 
-              const resultEntry: any = {
-                platform: platformName,
-                success: true,
-                result
-              };
+							const resultEntry: any = {
+								platform: platformName,
+								success: true,
+								result,
+							};
 
-              // Add warning if cover image is provided for Hashnode
-              if (coverImageURL && platformName === "hashnode") {
-                resultEntry.warning = "Hashnode does not support cover images. The cover image was ignored for this post.";
-              }
+							// Add warning if cover image is provided for Hashnode
+							if (coverImageURL && platformName === "hashnode") {
+								resultEntry.warning =
+									"Hashnode does not support cover images. The cover image was ignored for this post.";
+							}
 
-              results.push(resultEntry);
-            } catch (err: any) {
-              results.push({
-                platform: platformName,
-                error: err.message
-              });
-            }
-          }
+							results.push(resultEntry);
+						} catch (err: any) {
+							results.push({
+								platform: platformName,
+								error: err.message,
+							});
+						}
+					}
 
           return {
             content: [{ type: "text", text: JSON.stringify(results, null, 2) }]
@@ -145,7 +316,7 @@ export class MyMCP extends McpAgent {
         } catch (err: any) {
           return {
             content: [
-              { type: "text", text: `❌ Error: ${err.message}` }
+              { type: "text", text: `Error: ${err.message}` }
             ]
           };
         }

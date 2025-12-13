@@ -1,5 +1,5 @@
 import type { BlogPlatform, PostInput, PublishResult } from "../base/types.js";
-import { postToDevto } from "./client.js";
+import { deleteFromDevto, getBlogsFromDevto, postToDevto } from "./client.js";
 
 export class DevToPlatform implements BlogPlatform {
 	async validateToken(token: string): Promise<boolean> {
@@ -19,6 +19,18 @@ export class DevToPlatform implements BlogPlatform {
     }
 }
 
+	async getAllBlogs(token: string): Promise<{ id?: string; url: string; slug?: string; }[]> {
+		const articles = await getBlogsFromDevto(token);
+		const mapped: { id?: string; url?: string; }[] = articles.map((a) => ({
+			id: a.id !== undefined ? String(a.id) : undefined,
+			url: a.url || a.canonical_url,
+		}));
+
+		return mapped
+			.filter((a): a is { id?: string; url: string; } => typeof a.url === "string")
+			.map((a) => ({ id: a.id, url: a.url }));
+	}
+
 
 	async publishPost(token: string, input: PostInput): Promise<PublishResult> {
 		const data = await postToDevto(
@@ -35,6 +47,10 @@ export class DevToPlatform implements BlogPlatform {
 			url: data.url,
 			publishedAt: data.published_at,
 		};
+	}
+
+	async deletePost(token: string, postId: string): Promise<void> {
+		await deleteFromDevto(token, postId);
 	}
 }
 

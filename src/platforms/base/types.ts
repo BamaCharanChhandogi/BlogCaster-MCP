@@ -15,6 +15,8 @@ export interface PublishResult {
 
 export interface BlogPlatform {
 	validateToken(token: string): Promise<boolean>;
+	getAllBlogs(token: string): Promise<{ id?: string; url: string; slug?: string; }[]>;
 	publishPost(token: string, input: PostInput): Promise<PublishResult>;
+	deletePost(token: string, postId: string): Promise<void>;
 }
 
