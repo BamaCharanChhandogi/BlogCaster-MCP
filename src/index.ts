@@ -66,6 +66,33 @@ export class MyMCP extends McpAgent {
       }
     }
 
+    // Save Config (New Internal Handler)
+    if (url.pathname === "/internal/save-token") {
+       try {
+         const body = await request.json() as { platform: string, token: string };
+         const config = await loadConfigFromStorage(this.doState.storage);
+         config.tokens = config.tokens || {};
+         config.tokens[body.platform] = body.token;
+         await saveConfigToStorage(config, this.doState.storage);
+         return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' }});
+       } catch (error: any) {
+         return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+       }
+    }
+    
+    // Delete Token (New Internal Handler)
+    if (url.pathname.startsWith("/internal/delete-token")) {
+       try {
+         // Assuming URL format: /internal/delete-token?platform=...
+         const p = url.searchParams.get("platform");
+         if(!p) throw new Error("Missing platform");
+         await deleteToken(p, this.doState.storage);
+         return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' }});
+       } catch (error: any) {
+          return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+       }
+    }
+
     return super.fetch(request);
   }
 
@@ -95,8 +122,6 @@ export class MyMCP extends McpAgent {
           });
 
           // 4. Return the production URL
-          // If we had a persistent ID, we could use that instead of a random sessionKey, 
-          // but for now we follow the safe random flow + linking.
           const productionUrl = `https://blogcaster-mcp.rrpb2580.workers.dev/tokens?session=${sessionKey}`;
           
           return {
@@ -108,19 +133,17 @@ export class MyMCP extends McpAgent {
       }
     );
 
-    // Tool: Set Token (Legacy/Deprecated but strictly functional)
+    // Tool: Set Token (Legacy)
     this.server.tool(
       "setPlatformToken",
       { platform: z.string(), token: z.string() },
       async ({ platform, token }) => {
         try {
-          // Logic for complex wordpress parsing removed for brevity in legacy tool, users should use UI.
-          // Fallback simple save to LOCAL storage (for barebones usage)
           const config = await loadConfigFromStorage(this.doState.storage);
           config.tokens = config.tokens || {};
           config.tokens[platform] = token;
           await saveConfigToStorage(config, this.doState.storage);
-          return { content: [{ type: "text", text: `Token saved (Legacy Mode). Consider using getTokenManagementLink() for better experience.` }] };
+          return { content: [{ type: "text", text: `Token saved (Legacy Mode).` }] };
         } catch (err: any) {
             return { content: [{ type: "text", text: `Error: ${err.message}` }] };
         }
@@ -237,29 +260,23 @@ async function handleTokenStatus(request: Request, env: any) {
 async function handleSaveToken(request: Request, env: any) {
     const url = new URL(request.url);
     const sessionKey = url.searchParams.get("session");
+    
     if (!sessionKey) return new Response(JSON.stringify({ error: "No session key" }), { status: 400 });
 
     try {
-        const body = await request.json() as { platform: string, token: string };
+        // Fix: Read body once
+        const body = await request.text(); // Read raw text to clone it
+        
         const id = env.MCP_OBJECT.idFromName(sessionKey);
         const stub = env.MCP_OBJECT.get(id);
         
-        // We write to settings via internal mechanism or we implement a save endpoint in the DO
-        // Simpler: We just read/write storage directly here? NO, we can't access DO storage from outside.
-        // We must have an endpoint on the DO to save config or use the stub to do it.
-        // Actually, for simplicity in this architecture, we can just treat the DO as a black box API.
-        // But `MyMCP` doesn't expose a "save config" HTTP endpoint.
-        // Let's create a temporary "setter" mechanism by extending the internal API or using a custom request.
+        // Forward to NEW internal handler
+        const response = await stub.fetch("http://internal/internal/save-token", {
+             method: "POST",
+             body: body, // Reuse body string
+             headers: { 'Content-Type': 'application/json' }
+        });
         
-        // Wait, MyMCP represents the worker LOGIC.
-        // We can route this request TO the DO instance using the stub.
-        // But the DO instance needs to handle the POST /api/tokens request? 
-        // MyMCP.fetch logic above (lines 43+) handles /internal/get-config.
-        // It DOES NOT handle "save token". 
-        
-        // Fix: We need to implement the save logic INSIDE MyMCP.fetch so the stub can call it!
-        // See updated MyMCP.fetch below (I will add it).
-        const response = await stub.fetch(request); // Forward the request to the DO!
         return response;
 
     } catch(e:any) { return new Response(JSON.stringify({ error: e.message }), { status: 500 }); }
@@ -269,9 +286,18 @@ async function handleDeleteToken(request: Request, env: any) {
      const url = new URL(request.url);
      const sessionKey = url.searchParams.get("session");
      if (!sessionKey) return new Response(JSON.stringify({ error: "No session key" }), { status: 400 });
+     
+     // Extract platform from URL path: /api/tokens/hashnode
+     const parts = url.pathname.split('/');
+     const platform = parts[parts.length - 1]; // last segment
+
      const id = env.MCP_OBJECT.idFromName(sessionKey);
      const stub = env.MCP_OBJECT.get(id);
-     return stub.fetch(request); // Forward to DO
+     
+     // Forward to internal delete handler
+     return stub.fetch(`http://internal/internal/delete-token?platform=${platform}`, {
+         method: "POST" // Internal usage
+     });
 }
 
 
@@ -280,26 +306,15 @@ export default {
     const url = new URL(request.url);
 
     // 1. Persistent ID Logic
-    // If ?userId=... is provided, we use that to derive the ID
     const userId = url.searchParams.get("userId");
     
-    // Helper to get the target DO
     const getTargetStub = () => {
         if (userId && /^[a-zA-Z0-9_-]+$/.test(userId)) {
              const id = env.MCP_OBJECT.idFromName(userId);
              return env.MCP_OBJECT.get(id);
         }
-        // Default: Random Ephemeral Session (Standard Flow)
-        // Note: For standard MCP connections without userId, we usually want a new unique ID.
-        // However, `MyMCP.serve` implementation in the library typically creates a new ID per connection or uses a singleton?
-        // Actually, McpAgent.serve() typically handles the upgrade.
-        // To support persistence, we must manually instantiate.
-        
-        // For simplicity and library compatibility:
-        // We will only use manual ID if userId is present.
-        return null; // Let library handle default
+        return null; 
     };
-
 
     if(url.pathname === "/") {
       return new Response(demoHtml, {
@@ -315,26 +330,17 @@ export default {
     
     // API Routes (Forwarding to Session DOs)
     if (url.pathname.startsWith("/api/tokens")) {
-        // These requests come from the browser. They have ?session=...
-        // We handle them by forwarding to the specific DO.
-        // But wait, the DO needs code to handle them.
-        // So we must add handlers to MyMCP.fetch
-        
-        // Actually, simpler: We can handle the logic HERE in the worker if we have access to the DO stub.
         if (request.method === "GET" && url.pathname === "/api/tokens/status") return handleTokenStatus(request, env);
-        if (request.method === "POST" && url.pathname === "/api/tokens") return handleSaveToken(request, env); // This forwards
-        if (request.method === "DELETE") return handleDeleteToken(request, env); // This forwards
+        if (request.method === "POST" && url.pathname === "/api/tokens") return handleSaveToken(request, env);
+        if (request.method === "DELETE") return handleDeleteToken(request, env);
     }
-
 
     // MCP & SSE Routes
     if (url.pathname === "/sse" || url.pathname === "/sse/message" || url.pathname === "/mcp") {
        const stub = getTargetStub();
        if (stub) {
-           // Persistent Mode: Forward to specific DO
            return stub.fetch(request);
        } else {
-           // Standard Mode: Use library default
            if (url.pathname.startsWith("/sse")) return MyMCP.serveSSE("/sse").fetch(request, env, ctx);
            return MyMCP.serve("/mcp").fetch(request, env, ctx);
        }
@@ -343,7 +349,3 @@ export default {
     return new Response("Not found", { status: 404 });
   }
 };
-
-// Update MyMCP.fetch to handle the forwarded API requests
-// We need to inject this into the class above. 
-// I will rewrite the class content in the actual file update to include these handlers.
