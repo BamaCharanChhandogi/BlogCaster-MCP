@@ -101,6 +101,13 @@ export const demoHtml = `<!DOCTYPE html>
         <p class="text-sm text-gray-700 font-semibold">3. List & Delete</p>
         <pre class="text-xs bg-white border border-gray-200 rounded p-3 overflow-auto">getBlogs({ platforms: ["hashnode", "devto"] })
 deletePost({ platforms: ["devto"], postId: "12345" })</pre>
+        <p class="text-sm text-gray-700 font-semibold">4. Update</p>
+        <pre class="text-xs bg-white border border-gray-200 rounded p-3 overflow-auto">updatePost({
+  postId: "12345",
+  title: "Updated Title",
+  contentMarkdown: "# Updated Content",
+  platforms: ["devto"]
+})</pre>
       </div>
     </section>
 
@@ -129,6 +136,14 @@ deletePost({ platforms: ["devto"], postId: "12345" })</pre>
             <span class="text-xs bg-gray-100 px-2 py-1 rounded font-mono">fetch</span>
           </div>
           <p class="text-sm text-gray-600">List your recent posts per platform.</p>
+        </div>
+
+        <div class="border border-gray-200 rounded-lg p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <p class="font-semibold">updatePost</p>
+            <span class="text-xs bg-gray-100 px-2 py-1 rounded font-mono">edit</span>
+          </div>
+          <p class="text-sm text-gray-600">Update an existing post.</p>
         </div>
 
         <div class="border border-gray-200 rounded-lg p-5 space-y-3">

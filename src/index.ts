@@ -186,7 +186,42 @@ export class MyMCP extends McpAgent {
       }
     );
 
-    // Tool: Get Blogs
+    // Tool: Update Post
+    this.server.tool(
+      "updatePost",
+      {
+        postId: z.string(),
+        title: z.string(),
+        contentMarkdown: z.string(),
+        platforms: z.array(z.string()),
+        coverImageURL: z.string().optional(),
+      },
+      async ({ postId, title, contentMarkdown, platforms, coverImageURL }) => {
+        try {
+          const config = await this.getConfig(); // USE BRIDGE
+          config.tokens = config.tokens || {};
+          const results: any[] = [];
+
+          for (const platformName of platforms) {
+            const token = config.tokens[platformName];
+            if (!token) {
+              results.push({ platform: platformName, error: "Token missing" });
+              continue;
+            }
+            try {
+                const platform = PlatformManager.getPlatform(platformName as any);
+                const result = await platform.updatePost(token, postId, { title, contentMarkdown, coverImageURL });
+                results.push({ platform: platformName, success: true, result });
+            } catch (e: any) {
+                results.push({ platform: platformName, error: e.message });
+            }
+          }
+          return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
+        } catch (err: any) {
+          return { content: [{ type: "text", text: `Error: ${err.message}` }] };
+        }
+      }
+    );
     this.server.tool(
       "getBlogs",
       { platforms: z.array(z.string()) },

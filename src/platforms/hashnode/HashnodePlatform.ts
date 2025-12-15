@@ -6,6 +6,7 @@ import {
 	getPublicationId,
 	getAllBlogs,
 	deletePublicationStory,
+	updatePost as updateHashnodePost,
 } from "./client.js";
 
 export class HashnodePlatform implements BlogPlatform {
@@ -61,6 +62,32 @@ export class HashnodePlatform implements BlogPlatform {
 		const publicationId = await getPublicationId(token);
 		if (!publicationId) throw new Error("No Hashnode publication found.");
 		await deletePublicationStory(token, publicationId, postId);
+	}
+
+	async updatePost(
+		token: string,
+		postId: string,
+		input: PostInput,
+	): Promise<PublishResult> {
+		const publicationId = await getPublicationId(token);
+		if (!publicationId) throw new Error("No Hashnode publication found.");
+
+		const post = await updateHashnodePost(
+			token,
+			publicationId,
+			postId,
+			input.title,
+			input.contentMarkdown,
+			input.coverImageURL
+		);
+
+		return {
+			id: post.id,
+			title: post.title,
+			slug: post.slug,
+			url: post.url,
+			publishedAt: post.publishedAt,
+		};
 	}
 }
 

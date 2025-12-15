@@ -37,6 +37,42 @@ export async function postToDevto(
 	return data; // contains id, url, slug etc
 }
 
+export async function updateToDevto(
+	apiKey: string,
+	articleId: string,
+	title: string,
+	bodyMarkdown: string,
+	tags: string[] = [],
+	coverImageURL?: string,
+) {
+	const article: any = {
+		title,
+		body_markdown: bodyMarkdown,
+		tags,
+	};
+	if (coverImageURL) {
+		article.main_image = coverImageURL;
+	}
+	
+	const res = await fetch(`${DEVTO_ENDPOINT}/${articleId}`, {
+		method: "PUT",
+		headers: {
+			"Content-Type": "application/json",
+			"api-key": apiKey,
+			"User-Agent": "MyApp/1.0"
+		},
+		body: JSON.stringify({ article }),
+	});
+
+	if (!res.ok) {
+		const errorText = await res.text();
+		throw new Error(`DEV.to update failed: ${res.status} ${errorText}`);
+	}
+
+	const data = await res.json() as any;
+	return data;
+}
+
 export async function getBlogsFromDevto(apiKey: string, perPage = 30) {
 	const res = await fetch(`${DEVTO_ENDPOINT}/me?per_page=${perPage}&page=1`, {
 		method: "GET",
@@ -74,4 +110,3 @@ export async function deleteFromDevto(apiKey: string, articleId: string) {
 		throw new Error(`DEV.to delete failed: ${res.status} ${errorText}`);
 	}
 }
-
