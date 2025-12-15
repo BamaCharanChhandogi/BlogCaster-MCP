@@ -3,6 +3,7 @@ import {
 	createWpPost,
 	deleteWpPost,
 	listWpPosts,
+	updateWpPost,
 	validateWpToken,
 } from "./client.js";
 
@@ -17,6 +18,23 @@ export class WordpressPlatform implements BlogPlatform {
 
 	async publishPost(token: string, input: PostInput): Promise<PublishResult> {
 		const data = await createWpPost(token, input.title, input.contentMarkdown, input.coverImageURL);
+		return {
+			id: data.id,
+			title: data.title,
+			slug: data.slug,
+			url: data.url,
+			publishedAt: data.publishedAt,
+		};
+	}
+
+	async updatePost(token: string, postId: string, input: PostInput): Promise<PublishResult> {
+		const data = await updateWpPost(
+			token,
+			postId,
+			input.title,
+			input.contentMarkdown,
+			input.coverImageURL
+		);
 		return {
 			id: data.id,
 			title: data.title,

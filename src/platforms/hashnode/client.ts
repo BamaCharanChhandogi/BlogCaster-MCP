@@ -1,3 +1,5 @@
+// src/platforms/hashnode/client.ts
+
 const HASHNODE_ENDPOINT = "https://gql.hashnode.com/graphql";
 
 export async function callHashnode(
@@ -158,3 +160,36 @@ export async function publishDraft(token: string, draftId: string) {
 	return data.publishDraft.post;
 }
 
+export async function updatePost(
+    token: string,
+    publicationId: string,
+    postId: string,
+    title: string,
+    contentMarkdown: string,
+    coverImageURL?: string
+) {
+    const query = `
+    mutation UpdatePost($input: UpdatePostInput!) {
+        updatePost(input: $input) {
+            post { id title slug url publishedAt }
+        }
+    }
+    `;
+
+    // Try to construct input - hashnode API for updatePost might vary, assuming checks on postId
+    const variables = {
+        input: {
+            id: postId, // Hashnode's updatePost usually takes the post ID
+            title: title,
+            contentMarkdown: contentMarkdown,
+            coverImageOptions: coverImageURL ? { coverImageURL } : undefined,
+        }
+    };
+    
+    // Note: Hashnode's API is a bit complex with updates. 
+    // If postId is actually a slug, we might need to find the ID first.
+    // Assuming postId passed here IS the Node ID (as returned by publish/list).
+    
+    const data = await callHashnode(query, variables, token);
+    return data.updatePost.post;
+}

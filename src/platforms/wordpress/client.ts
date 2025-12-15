@@ -231,6 +231,62 @@ export async function createWpPost(
 	};
 }
 
+export async function updateWpPost(
+	token: string,
+	postId: string,
+	title: string,
+	contentMarkdown: string,
+	coverImageURL?: string,
+): Promise<{ id: string; title: string; slug?: string; url: string; publishedAt?: string }> {
+	const cfg = parseTokenConfig(token);
+	const html = markdownToHtml(contentMarkdown);
+
+	let featuredMediaId: number | undefined;
+	if (coverImageURL) {
+		try {
+			featuredMediaId = await uploadWpMedia(token, coverImageURL);
+		} catch (err) {
+			console.error("Cover image upload failed, continuing without it:", err);
+		}
+	}
+
+	const body: any = {
+		title,
+		content: html,
+	};
+	if (featuredMediaId) body.featured_media = featuredMediaId;
+
+	const res = await callWp(
+		cfg,
+		cfg.mode === "basic" ? `/wp-json/wp/v2/posts/${postId}` : `/posts/${postId}`,
+	{
+		method: "POST", // WordPress update is predominantly POST (or PUT/PATCH, but POST works widely)
+		body: JSON.stringify(body),
+	},
+	);
+
+	if (!res.ok) {
+		const errorText = await res.text();
+		throw new Error(`WordPress update failed: ${res.status} ${errorText}`);
+	}
+
+	const data = (await res.json()) as {
+		id: number | string;
+		title?: { rendered?: string };
+		slug?: string;
+		link?: string;
+		date_gmt?: string;
+	};
+
+	return {
+		id: String(data.id),
+		title: data.title?.rendered || title,
+		slug: data.slug,
+		url: data.link || "",
+		publishedAt: data.date_gmt,
+	};
+}
+
 export async function deleteWpPost(token: string, postId: string): Promise<void> {
 	const cfg = parseTokenConfig(token);
 	const res = await callWp(
@@ -248,5 +304,3 @@ export async function deleteWpPost(token: string, postId: string): Promise<void>
 		throw new Error(`WordPress delete failed: ${res.status} ${errorText}`);
 	}
 }
-
-

@@ -1,5 +1,7 @@
 export interface Config {
 	tokens?: Record<string, string>; // platform → token
+	sessionKey?: string; // Unique session key for token management portal
+	createdAt?: number; // Timestamp when session was created
 }
 
 const CONFIG_KEY = "blog-mcp-config";
@@ -51,3 +53,11 @@ export async function saveConfig(config: Config, kv: KVNamespace): Promise<void>
 	await kv.put(CONFIG_KEY, JSON.stringify(finalConfig, null, 2));
 }
 
+// Delete a specific platform token
+export async function deleteToken(platform: string, storage: DurableObjectStorage): Promise<void> {
+	const config = await loadConfigFromStorage(storage);
+	if (config.tokens && config.tokens[platform]) {
+		delete config.tokens[platform];
+		await saveConfigToStorage(config, storage);
+	}
+}
