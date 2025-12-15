@@ -305,17 +305,6 @@ export default {
   async fetch(request: Request, env: any, ctx: ExecutionContext) {
     const url = new URL(request.url);
 
-    // 1. Persistent ID Logic
-    const userId = url.searchParams.get("userId");
-    
-    const getTargetStub = () => {
-        if (userId && /^[a-zA-Z0-9_-]+$/.test(userId)) {
-             const id = env.MCP_OBJECT.idFromName(userId);
-             return env.MCP_OBJECT.get(id);
-        }
-        return null; 
-    };
-
     if(url.pathname === "/") {
       return new Response(demoHtml, {
         headers: { 'Content-Type': 'text/html', 'Cache-Control': 'public, max-age=3600' }
@@ -336,14 +325,11 @@ export default {
     }
 
     // MCP & SSE Routes
-    if (url.pathname === "/sse" || url.pathname === "/sse/message" || url.pathname === "/mcp") {
-       const stub = getTargetStub();
-       if (stub) {
-           return stub.fetch(request);
-       } else {
-           if (url.pathname.startsWith("/sse")) return MyMCP.serveSSE("/sse").fetch(request, env, ctx);
-           return MyMCP.serve("/mcp").fetch(request, env, ctx);
-       }
+    if (url.pathname === "/sse" || url.pathname === "/sse/message") {
+       return MyMCP.serveSSE("/sse").fetch(request, env, ctx);
+    }
+    if (url.pathname === "/mcp") {
+       return MyMCP.serve("/mcp").fetch(request, env, ctx);
     }
 
     return new Response("Not found", { status: 404 });
