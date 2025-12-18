@@ -3,52 +3,47 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BlogCaster Token Management</title>
+  <title>BlogCaster Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-    /* Minimalist transitions */
     .transition-all-200 { transition: all 0.2s ease; }
   </style>
 </head>
-<body class="bg-white text-gray-900">
-  <!-- Header -->
+<body class="bg-gray-50 text-gray-900">
   <header class="border-b border-gray-200 bg-white sticky top-0 z-50">
     <div class="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
       <div class="flex items-center space-x-3">
         <div class="w-8 h-8 bg-black rounded flex items-center justify-center text-white font-semibold text-xs">BC</div>
         <div>
-          <p class="font-bold text-sm md:text-base">Token Management</p>
+          <p class="font-bold text-sm md:text-base">Dashboard</p>
         </div>
       </div>
-      <button onclick="loadTokenStatus()" class="text-xs md:text-sm font-medium border border-gray-200 rounded px-3 py-1.5 hover:bg-gray-50 transition flex items-center gap-2">
-        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-        Refresh
-      </button>
+      <div class="flex items-center gap-4">
+          <span id="user-email" class="text-xs text-gray-500 hidden md:inline"></span>
+          <span id="user-plan" class="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 font-semibold hidden md:inline"></span>
+          <button onclick="logout()" class="text-xs font-medium text-red-600 hover:text-red-800">
+            Logout
+          </button>
+      </div>
     </div>
   </header>
 
   <main class="max-w-4xl mx-auto px-6 py-10 space-y-10">
-    <!-- Intro -->
     <section>
       <h1 class="text-2xl font-bold mb-2">Configure Platforms</h1>
-      <p class="text-gray-600">Securely save your API tokens. These are stored isolated in your session.</p>
+      <p class="text-gray-600">Securely save your API tokens. These are encrypted and stored in your secure user profile.</p>
     </section>
 
-    <!-- Status Overview -->
     <section class="grid grid-cols-1 md:grid-cols-3 gap-4" id="statusContainer">
-      <!-- Skeletons -->
       <div class="bg-gray-50 h-24 rounded border border-gray-100 animate-pulse"></div>
       <div class="bg-gray-50 h-24 rounded border border-gray-100 animate-pulse"></div>
       <div class="bg-gray-50 h-24 rounded border border-gray-100 animate-pulse"></div>
     </section>
 
-    <!-- Alert Container -->
     <div id="alertContainer"></div>
 
-    <!-- Forms Container -->
     <div class="grid grid-cols-1 gap-12">
-      
       <!-- Hashnode -->
       <section class="border-t border-gray-200 pt-8">
         <div class="flex items-center justify-between mb-6">
@@ -62,13 +57,7 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
           <form onsubmit="saveToken(event, 'hashnode')" class="space-y-4">
             <div>
               <label class="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">Personal Access Token</label>
-              <input 
-                type="password" 
-                id="hashnode-token" 
-                placeholder="Enter Hashnode token"
-                class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all-200"
-                required
-              />
+              <input type="password" id="hashnode-token" placeholder="Enter Hashnode token" class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all-200" required />
             </div>
             <div class="flex items-center gap-3">
                <button type="submit" class="bg-black text-white px-4 py-2 rounded text-sm font-medium hover:bg-gray-800 transition">Save Token</button>
@@ -80,7 +69,6 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
             <ol class="list-decimal list-inside space-y-1.5 text-xs">
               <li>Open <a href="https://hashnode.com/settings/developer" target="_blank" class="underline hover:text-black">Developer Settings</a></li>
               <li>Generate token with <code class="bg-gray-200 px-1 rounded">publish</code> scope</li>
-              <li>Hashnode ignores cover images via API</li>
             </ol>
           </div>
         </div>
@@ -99,13 +87,7 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
           <form onsubmit="saveToken(event, 'devto')" class="space-y-4">
             <div>
               <label class="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">API Key</label>
-              <input 
-                type="password" 
-                id="devto-token" 
-                placeholder="Enter Dev.to API Key"
-                class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all-200"
-                required
-              />
+              <input type="password" id="devto-token" placeholder="Enter Dev.to API Key" class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all-200" required />
             </div>
             <div class="flex items-center gap-3">
                <button type="submit" class="bg-black text-white px-4 py-2 rounded text-sm font-medium hover:bg-gray-800 transition">Save Token</button>
@@ -113,12 +95,11 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
           </form>
 
           <div class="text-sm text-gray-600 bg-gray-50 p-4 rounded h-fit">
-            <p class="font-semibold text-gray-900 mb-2">How to get token</p>
-            <ol class="list-decimal list-inside space-y-1.5 text-xs">
-              <li>Go to <a href="https://dev.to/settings/extensions" target="_blank" class="underline hover:text-black">Dev.to API Keys</a></li>
-              <li>Create key with write permissions</li>
-              <li>Supports cover images</li>
-            </ol>
+             <p class="font-semibold text-gray-900 mb-2">How to get token</p>
+             <ol class="list-decimal list-inside space-y-1.5 text-xs">
+               <li>Go to <a href="https://dev.to/settings/extensions" target="_blank" class="underline hover:text-black">Dev.to API Keys</a></li>
+               <li>Create key with write permissions</li>
+             </ol>
           </div>
         </div>
       </section>
@@ -138,8 +119,6 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
         </div>
         
         <div class="grid md:grid-cols-[1fr_300px] gap-8">
-          
-          <!-- Basic Auth Form -->
           <div id="wp-basic-form">
             <form onsubmit="saveWordPressToken(event, 'basic')" class="space-y-4">
               <div>
@@ -162,7 +141,6 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
             </form>
           </div>
 
-          <!-- OAuth Form -->
           <div id="wp-oauth-form" class="hidden">
             <form onsubmit="saveWordPressToken(event, 'oauth')" class="space-y-4">
                 <div>
@@ -179,7 +157,6 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
             </form>
           </div>
 
-          <!-- Helper Text -->
           <div class="text-sm text-gray-600 bg-gray-50 p-4 rounded h-fit">
             <p class="font-semibold text-gray-900 mb-2">WordPress Setup</p>
             <div id="wp-basic-help">
@@ -198,23 +175,41 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
                </ol>
             </div>
           </div>
-
         </div>
       </section>
-
     </div>
   </main>
-
+  
   <footer class="border-t border-gray-200 mt-12 py-8">
     <div class="max-w-4xl mx-auto px-6 text-center text-sm text-gray-500">
-      <p>Tokens are encrypted and stored in your session. <a href="/" class="text-black underline hover:no-underline">Back to Docs</a></p>
+      <p>Tokens are encrypted and stored in your secure user profile. <a href="/" class="text-black underline hover:no-underline">Back to Docs</a></p>
     </div>
   </footer>
 
   <script>
-    const SESSION_KEY = '${sessionKey}';
-    
-    window.addEventListener('DOMContentLoaded', loadTokenStatus);
+    window.addEventListener('DOMContentLoaded', async () => {
+        await loadUser();
+        await loadTokenStatus();
+    });
+
+    async function loadUser() {
+        try {
+            const res = await fetch('/api/user/me');
+            if (res.ok) {
+                const user = await res.json();
+                document.getElementById('user-email').innerText = user.email;
+                const planBadge = document.getElementById('user-plan');
+                if (planBadge && user.plan) {
+                    planBadge.innerText = user.plan === 'free' ? 'Free Plan' : 'Pro Plan';
+                    planBadge.className = user.plan === 'free' 
+                        ? 'text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 font-semibold hidden md:inline'
+                        : 'text-xs px-2 py-1 rounded bg-purple-50 text-purple-700 font-semibold hidden md:inline';
+                }
+            } else {
+                window.location.href = '/login';
+            }
+        } catch(e) { console.error(e); }
+    }
 
     function switchWordPressMode(mode) {
       const basicForm = document.getElementById('wp-basic-form');
@@ -243,7 +238,7 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
 
     async function loadTokenStatus() {
       try {
-        const response = await fetch(\`/api/tokens/status?session=\${SESSION_KEY}\`);
+        const response = await fetch(\`/api/tokens/status\`);
         const data = await response.json();
         if (data.error) { showAlert('error', data.error); return; }
         updateStatusBadges(data);
@@ -260,7 +255,6 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
         const icon = configured ? '✓' : '○';
         const colorClass = configured ? 'text-green-700' : 'text-gray-400';
         
-        // Add Remove button if configured
         const removeButton = configured ? \`<button onclick="deleteToken('\${platform}')" class="text-xs text-red-600 hover:text-red-700 font-medium ml-auto flex items-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg> Remove</button>\` : '';
         
         return \`
@@ -296,18 +290,17 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
       if (!token) return;
 
       try {
-        const response = await fetch(\`/api/tokens?session=\${SESSION_KEY}\`, {
+        const response = await fetch(\`/api/tokens\`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ platform, token })
         });
-        const data = await response.json();
         if (response.ok) {
           showAlert('success', \`\${platform} saved\`);
           tokenInput.value = '';
           loadTokenStatus();
         } else {
-          showAlert('error', data.error);
+          showAlert('error', 'Failed to save token');
         }
       } catch (error) { showAlert('error', 'Network error'); }
     }
@@ -329,7 +322,7 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
       }
 
       try {
-        const response = await fetch(\`/api/tokens?session=\${SESSION_KEY}\`, {
+        const response = await fetch(\`/api/tokens\`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ platform: 'wordpress', token: tokenData })
@@ -339,8 +332,7 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
           event.target.reset();
           loadTokenStatus();
         } else {
-          const data = await response.json();
-          showAlert('error', data.error);
+          showAlert('error', 'Failed to save token');
         }
       } catch (error) { showAlert('error', 'Network error'); }
     }
@@ -348,12 +340,16 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
     async function deleteToken(platform) {
       if (!confirm(\`Delete \${platform} token?\`)) return;
       try {
-        const response = await fetch(\`/api/tokens/\${platform}?session=\${SESSION_KEY}\`, { method: 'DELETE' });
+        const response = await fetch(\`/api/tokens/\${platform}\`, { method: 'DELETE' });
         if (response.ok) {
           showAlert('success', \`\${platform} deleted\`);
           loadTokenStatus();
         } else { showAlert('error', 'Failed to delete'); }
       } catch (error) { showAlert('error', 'Network error'); }
+    }
+
+    async function logout() {
+      window.location.href = '/logout';
     }
 
     function showAlert(type, message) {

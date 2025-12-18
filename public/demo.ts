@@ -32,8 +32,9 @@ export const demoHtml = `<!DOCTYPE html>
         Works with any MCP-enabled client like Claude Desktop and Cursor/Cline.
       </p>
       <div class="flex flex-wrap gap-3">
-        <a href="#quickstart" class="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition">Quick start</a>
-        <a href="#tools" class="px-4 py-2 border border-gray-900 rounded hover:bg-gray-50 transition">Review Tools</a>
+        <a href="/dashboard" class="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition">Go to Dashboard</a>
+        <a href="#quickstart" class="px-4 py-2 border border-gray-900 rounded hover:bg-gray-50 transition">Quick start</a>
+        <a href="#tools" class="px-4 py-2 border border-gray-200 rounded hover:border-gray-300 transition">Review Tools</a>
         <a href="#tokens" class="px-4 py-2 border border-gray-200 rounded hover:border-gray-300 transition">Setup Guide</a>
       </div>
     </section>
