@@ -5,6 +5,7 @@ import { z } from "zod";
 import { PlatformManager } from "./publisher/PlatformManager.js";
 import { demoHtml } from "../public/demo.js";
 import { tokenPageHtml } from "../public/tokenPage.js";
+import { pricingPageHtml } from "../public/pricingPage.js";
 import { signLoginToken, verifyLoginToken } from "./auth/auth.js";
 import { sendLoginEmail } from "./utils/email.js";
 import { UserDO } from "./auth/UserDO.js";
@@ -386,12 +387,26 @@ export default {
         status: 302,
         headers: {
           'Set-Cookie': cookie,
-          'Location': '/dashboard'
+          'Location': '/pricing'
         }
       });
     }
 
-    // 4. Dashboard (Protected)
+    // 4. Pricing Page
+    if (url.pathname === "/pricing") {
+      const cookie = request.headers.get("Cookie");
+      const email = cookie?.match(/auth_user=([^;]+)/)?.[1];
+
+      if (!email) {
+        return new Response(null, { status: 302, headers: { 'Location': '/login' } });
+      }
+
+      return new Response(pricingPageHtml(), {
+        headers: { 'Content-Type': 'text/html' }
+      });
+    }
+
+    // 5. Dashboard (Protected)
     if (url.pathname === "/dashboard" || url.pathname === "/tokens") {
       const cookie = request.headers.get("Cookie");
       const email = cookie?.match(/auth_user=([^;]+)/)?.[1];
@@ -405,7 +420,7 @@ export default {
       });
     }
 
-    // 5. User API (Protected)
+    // 6. User API (Protected)
     if (url.pathname.startsWith("/api/user") || url.pathname.startsWith("/api/tokens")) {
       const cookie = request.headers.get("Cookie");
       const email = cookie?.match(/auth_user=([^;]+)/)?.[1];
@@ -448,9 +463,18 @@ export default {
           headers: { 'Content-Type': 'application/json' }
         });
       }
+
+      if (request.method === "POST" && url.pathname === "/api/user/select-plan") {
+        const { plan } = await request.json() as { plan: string };
+        return userStub.fetch("http://internal/internal/set-plan", {
+          method: "POST",
+          body: JSON.stringify({ plan }),
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
     }
 
-    // 6. Logout
+    // 7. Logout
     if (url.pathname === "/logout") {
       return new Response(null, {
         status: 302,

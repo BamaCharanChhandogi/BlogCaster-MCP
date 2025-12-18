@@ -10,6 +10,7 @@ interface UserProfile {
     id: string; // email for now, or UUID
     email: string;
     createdAt: number;
+    plan: string; // 'free' or 'pro'
 }
 
 export class UserDO extends DurableObject {
@@ -98,7 +99,7 @@ export class UserDO extends DurableObject {
         if (url.pathname === "/internal/init") {
             const { email, id } = await request.json() as { email: string, id: string };
             if (!this.profile) {
-                this.profile = { id, email, createdAt: Date.now() };
+                this.profile = { id, email, createdAt: Date.now(), plan: 'free' };
                 await this.state.storage.put("profile", this.profile);
             }
             return new Response(JSON.stringify(this.profile), { headers: { 'Content-Type': 'application/json' } });
@@ -114,6 +115,17 @@ export class UserDO extends DurableObject {
                 await this.state.storage.put("tokens", this.tokens);
             }
             return new Response("Deleted");
+        }
+
+        // 7. Set Plan
+        if (url.pathname === "/internal/set-plan") {
+            const { plan } = await request.json() as { plan: string };
+            this.profile = (await this.state.storage.get<UserProfile>("profile")) || null;
+            if (this.profile) {
+                this.profile.plan = plan;
+                await this.state.storage.put("profile", this.profile);
+            }
+            return new Response(JSON.stringify(this.profile), { headers: { 'Content-Type': 'application/json' } });
         }
 
         return new Response("Not Found", { status: 404 });

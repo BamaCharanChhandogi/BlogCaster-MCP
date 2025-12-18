@@ -21,6 +21,7 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
       </div>
       <div class="flex items-center gap-4">
           <span id="user-email" class="text-xs text-gray-500 hidden md:inline"></span>
+          <span id="user-plan" class="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 font-semibold hidden md:inline"></span>
           <button onclick="logout()" class="text-xs font-medium text-red-600 hover:text-red-800">
             Logout
           </button>
@@ -197,6 +198,13 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
             if (res.ok) {
                 const user = await res.json();
                 document.getElementById('user-email').innerText = user.email;
+                const planBadge = document.getElementById('user-plan');
+                if (planBadge && user.plan) {
+                    planBadge.innerText = user.plan === 'free' ? 'Free Plan' : 'Pro Plan';
+                    planBadge.className = user.plan === 'free' 
+                        ? 'text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 font-semibold hidden md:inline'
+                        : 'text-xs px-2 py-1 rounded bg-purple-50 text-purple-700 font-semibold hidden md:inline';
+                }
             } else {
                 window.location.href = '/login';
             }
