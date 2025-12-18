@@ -287,14 +287,12 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ platform, token })
         });
-        const data = await response.json();
-        console.log(data);
         if (response.ok) {
           showAlert('success', \`\${platform} saved\`);
           tokenInput.value = '';
           loadTokenStatus();
         } else {
-          showAlert('error', data.error);
+          showAlert('error', 'Failed to save token');
         }
       } catch (error) { showAlert('error', 'Network error'); }
     }
@@ -326,8 +324,7 @@ export const tokenPageHtml = (sessionKey: string) => `<!DOCTYPE html>
           event.target.reset();
           loadTokenStatus();
         } else {
-          const data = await response.json();
-          showAlert('error', data.error);
+          showAlert('error', 'Failed to save token');
         }
       } catch (error) { showAlert('error', 'Network error'); }
     }
