@@ -1,156 +1,108 @@
+
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { PlatformManager } from "./publisher/PlatformManager.js";
-import { loadConfigFromStorage, saveConfigToStorage, deleteToken, Config } from "./config.js";
 import { demoHtml } from "../public/demo.js";
 import { tokenPageHtml } from "../public/tokenPage.js";
-import { getOrCreateSessionKey, validateSessionKey, generateSessionKey } from "./utils/session.js";
+import { signLoginToken, verifyLoginToken } from "./auth/auth.js";
+import { sendLoginEmail } from "./utils/email.js";
+import { UserDO } from "./auth/UserDO.js";
+export { UserDO };
+
+interface Env {
+  BlogMCP: KVNamespace;
+  MCP_OBJECT: DurableObjectNamespace<MyMCP>;
+  USER_OBJECT: DurableObjectNamespace<UserDO>;
+  ENCRYPTION_KEY: string;
+  MAGIC_LINK_SECRET?: string;
+  RESEND_API_KEY?: string;
+}
 
 // Main MCP Class
 export class MyMCP extends McpAgent {
   server = new McpServer({
     name: "blogcaster-mcp",
-    version: "0.1.0",
+    version: "0.2.0",
   });
 
   private doState: DurableObjectState;
-  private kv?: KVNamespace;
-  private mcpEnv: any;
+  public env: Env;
 
-  constructor(state: DurableObjectState, env: any) {
+  constructor(state: DurableObjectState, env: Env) {
     super(state, env);
     this.doState = state;
-    this.mcpEnv = env;
-    this.kv = env.BlogMCP;
+    this.env = env;
   }
 
-  // Helper to get config from linked Session DO or fallback to local
-  private async getConfig(): Promise<Config> {
-    const activeSessionKey = await this.doState.storage.get<string>("active_session_key");
-    if (activeSessionKey) {
-        try {
-            const id = this.mcpEnv.MCP_OBJECT.idFromName(activeSessionKey);
-            const stub = this.mcpEnv.MCP_OBJECT.get(id);
-            const response = await stub.fetch("http://internal/internal/get-config"); 
-            if (response.ok) return await response.json() as Config;
-        } catch (e) {
-            console.error("Failed to fetch from Session DO", e);
-        }
-    }
-    return loadConfigFromStorage(this.doState.storage);
+  // Helper to get the linked user's email
+  private async getLinkedUser(): Promise<string | null> {
+    return await this.doState.storage.get<string>("linked_user_email") || null;
   }
 
-  // Internal Fetch Handler (runs inside the specific DO instance)
+  private getUserStub(email: string): DurableObjectStub<UserDO> {
+    const id = this.env.USER_OBJECT.idFromName(email);
+    return this.env.USER_OBJECT.get(id);
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
-    // Initialize Session (Route to link DO)
-    if (url.pathname === "/init-session") {
-      try {
-        const body = await request.json() as { sessionKey: string };
-        await this.doState.storage.put("user-session-key", body.sessionKey);
-        return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' }});
-      } catch (error: any) {
-        return new Response(JSON.stringify({ error: error.message }), { status: 500 });
-      }
-    }
-
-    // Get Config (Internal Bridge)
-    if (url.pathname === "/internal/get-config") {
-      try {
-        const config = await loadConfigFromStorage(this.doState.storage);
-        return new Response(JSON.stringify(config), { headers: { 'Content-Type': 'application/json' }});
-      } catch (error: any) {
-        return new Response(JSON.stringify({ error: error.message }), { status: 500 });
-      }
-    }
-
-    // Save Config (New Internal Handler)
-    if (url.pathname === "/internal/save-token") {
-       try {
-         const body = await request.json() as { platform: string, token: string };
-         const config = await loadConfigFromStorage(this.doState.storage);
-         config.tokens = config.tokens || {};
-         config.tokens[body.platform] = body.token;
-         await saveConfigToStorage(config, this.doState.storage);
-         return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' }});
-       } catch (error: any) {
-         return new Response(JSON.stringify({ error: error.message }), { status: 500 });
-       }
-    }
-    
-    // Delete Token (New Internal Handler)
-    if (url.pathname.startsWith("/internal/delete-token")) {
-       try {
-         // Assuming URL format: /internal/delete-token?platform=...
-         const p = url.searchParams.get("platform");
-         if(!p) throw new Error("Missing platform");
-         await deleteToken(p, this.doState.storage);
-         return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' }});
-       } catch (error: any) {
-          return new Response(JSON.stringify({ error: error.message }), { status: 500 });
-       }
+    // Internal Endpoint: Link User
+    if (url.pathname === "/internal/link-user") {
+      const { email } = await request.json() as { email: string };
+      await this.doState.storage.put("linked_user_email", email);
+      return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     return super.fetch(request);
   }
 
-  async init(env?: any) {
-    if (env?.BlogMCP) this.kv = env.BlogMCP;
-
-    // Tool: Get Management Link
+  async init() {
+    // Tool: Get Login Link
     this.server.tool(
-      "getTokenManagementLink",
-      "Get a secure link to manage your platform tokens on the web",
+      "getLoginLink",
+      "Get a login link to authenticate and manage your tokens",
       {},
       async () => {
-        try {
-          // 1. Generate new session key
-          const sessionKey = generateSessionKey();
-          
-          // 2. Link this MCP connection to that session key
-          await this.doState.storage.put("active_session_key", sessionKey);
-          
-          // 3. Initialize the Session DO (so it's ready)
-          const id = this.mcpEnv.MCP_OBJECT.idFromName(sessionKey);
-          const stub = this.mcpEnv.MCP_OBJECT.get(id);
-          await stub.fetch("http://internal/init-session", {
-              method: "POST",
-              body: JSON.stringify({ sessionKey }),
-              headers: {'Content-Type': 'application/json'}
-          });
+        const sessionId = this.doState.id.toString();
+        // Assuming dev URL for now, or we could pass HOST in env
+        // Using worker.dev url as base
+        const loginUrl = `https://blogcaster-mcp.rrpb2580.workers.dev/login?connect_id=${sessionId}`;
 
-          // 4. Return the production URL
-          const productionUrl = `https://blogcaster-mcp.rrpb2580.workers.dev/tokens?session=${sessionKey}`;
-          
-          return {
-            content: [{ type: "text", text: `Manage your tokens here:\n${productionUrl}` }]
-          };
-        } catch (error: any) {
-          return { content: [{ type: "text", text: `Error: ${error.message}` }] };
-        }
+        const linkedUser = await this.getLinkedUser();
+        const status = linkedUser ? `Already linked to ${linkedUser}` : "Not connected";
+
+        return {
+          content: [{ type: "text", text: `Status: ${status}\n\nLogin here: ${loginUrl}` }]
+        };
       }
     );
 
-    // Tool: Set Token (Legacy)
+    // Tool: Who Am I
     this.server.tool(
-      "setPlatformToken",
-      { platform: z.string(), token: z.string() },
-      async ({ platform, token }) => {
-        try {
-          const config = await loadConfigFromStorage(this.doState.storage);
-          config.tokens = config.tokens || {};
-          config.tokens[platform] = token;
-          await saveConfigToStorage(config, this.doState.storage);
-          return { content: [{ type: "text", text: `Token saved (Legacy Mode).` }] };
-        } catch (err: any) {
-            return { content: [{ type: "text", text: `Error: ${err.message}` }] };
-        }
+      "whoami",
+      "Check current authenticated user",
+      {},
+      async () => {
+        const email = await this.getLinkedUser();
+        if (!email) return { content: [{ type: "text", text: "Not logged in." }] };
+        return { content: [{ type: "text", text: `Logged in as: ${email}` }] };
       }
     );
 
-    // Tool: Publish Post
+    // Tool: Logout
+    this.server.tool(
+      "logout",
+      "Clear current authentication",
+      {},
+      async () => {
+        await this.doState.storage.delete("linked_user_email");
+        return { content: [{ type: "text", text: "Logged out." }] };
+      }
+    );
+
+    // Tool: Publish Post (Auth Aware)
     this.server.tool(
       "publishPost",
       {
@@ -161,27 +113,34 @@ export class MyMCP extends McpAgent {
       },
       async ({ title, contentMarkdown, platforms, coverImageURL }) => {
         try {
-          const config = await this.getConfig(); // USE BRIDGE
-          config.tokens = config.tokens || {};
+          const email = await this.getLinkedUser();
+          if (!email) {
+            return { content: [{ type: "text", text: "Error: Login required. Run getLoginLink() first." }], isError: true };
+          }
+
+          const userStub = this.getUserStub(email);
+          const response = await userStub.fetch("http://internal/internal/get-tokens");
+          const tokens = await response.json() as Record<string, string>;
+
           const results: any[] = [];
 
           for (const platformName of platforms) {
-            const token = config.tokens[platformName];
+            const token = tokens[platformName];
             if (!token) {
-              results.push({ platform: platformName, error: "Token missing" });
+              results.push({ platform: platformName, error: "Token missing. Configure it in the dashboard." });
               continue;
             }
             try {
-                const platform = PlatformManager.getPlatform(platformName as any);
-                const result = await platform.publishPost(token, { title, contentMarkdown, coverImageURL });
-                results.push({ platform: platformName, success: true, result });
+              const platform = PlatformManager.getPlatform(platformName as any);
+              const result = await platform.publishPost(token, { title, contentMarkdown, coverImageURL });
+              results.push({ platform: platformName, success: true, result });
             } catch (e: any) {
-                results.push({ platform: platformName, error: e.message });
+              results.push({ platform: platformName, error: e.message });
             }
           }
           return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
         } catch (err: any) {
-          return { content: [{ type: "text", text: `Error: ${err.message}` }] };
+          return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
         }
       }
     );
@@ -198,22 +157,27 @@ export class MyMCP extends McpAgent {
       },
       async ({ postId, title, contentMarkdown, platforms, coverImageURL }) => {
         try {
-          const config = await this.getConfig(); // USE BRIDGE
-          config.tokens = config.tokens || {};
+          const email = await this.getLinkedUser();
+          if (!email) return { content: [{ type: "text", text: "Error: Login required." }], isError: true };
+
+          const userStub = this.getUserStub(email);
+          const response = await userStub.fetch("http://internal/internal/get-tokens");
+          const tokens = await response.json() as Record<string, string>;
+
           const results: any[] = [];
 
           for (const platformName of platforms) {
-            const token = config.tokens[platformName];
+            const token = tokens[platformName];
             if (!token) {
               results.push({ platform: platformName, error: "Token missing" });
               continue;
             }
             try {
-                const platform = PlatformManager.getPlatform(platformName as any);
-                const result = await platform.updatePost(token, postId, { title, contentMarkdown, coverImageURL });
-                results.push({ platform: platformName, success: true, result });
+              const platform = PlatformManager.getPlatform(platformName as any);
+              const result = await platform.updatePost(token, postId, { title, contentMarkdown, coverImageURL });
+              results.push({ platform: platformName, success: true, result });
             } catch (e: any) {
-                results.push({ platform: platformName, error: e.message });
+              results.push({ platform: platformName, error: e.message });
             }
           }
           return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
@@ -222,24 +186,31 @@ export class MyMCP extends McpAgent {
         }
       }
     );
+
+    // Tool: Get Blogs
     this.server.tool(
       "getBlogs",
       { platforms: z.array(z.string()) },
       async ({ platforms }) => {
         try {
-           const config = await this.getConfig(); // USE BRIDGE
-           config.tokens = config.tokens || {};
-           const result: any[] = [];
-           for(const p of platforms) {
-               const token = config.tokens[p];
-               if(!token) { result.push({platform: p, error: "Token missing"}); continue; }
-               try {
-                 const platform = PlatformManager.getPlatform(p as any);
-                 const blogs = await platform.getAllBlogs(token);
-                 result.push({platform: p, success: true, blogs});
-               } catch(e:any) { result.push({platform: p, error: e.message}); }
-           }
-           return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+          const email = await this.getLinkedUser();
+          if (!email) return { content: [{ type: "text", text: "Error: Login required." }], isError: true };
+
+          const userStub = this.getUserStub(email);
+          const response = await userStub.fetch("http://internal/internal/get-tokens");
+          const tokens = await response.json() as Record<string, string>;
+
+          const result: any[] = [];
+          for (const p of platforms) {
+            const token = tokens[p];
+            if (!token) { result.push({ platform: p, error: "Token missing" }); continue; }
+            try {
+              const platform = PlatformManager.getPlatform(p as any);
+              const blogs = await platform.getAllBlogs(token);
+              result.push({ platform: p, success: true, blogs });
+            } catch (e: any) { result.push({ platform: p, error: e.message }); }
+          }
+          return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
         } catch (err: any) { return { content: [{ type: "text", text: `Error: ${err.message}` }] }; }
       }
     );
@@ -249,122 +220,260 @@ export class MyMCP extends McpAgent {
       "deletePost",
       { platforms: z.array(z.string()), postId: z.string() },
       async ({ platforms, postId }) => {
-         try {
-            const config = await this.getConfig(); // USE BRIDGE
-            config.tokens = config.tokens || {};
-            const result: any[] = [];
-            for (const p of platforms) {
-                const token = config.tokens[p];
-                if (!token) { result.push({platform: p, error: "Missing token"}); continue; }
-                try {
-                    const platform = PlatformManager.getPlatform(p as any);
-                    await platform.deletePost(token, postId);
-                    result.push({platform: p, success: true});
-                } catch(e:any) { result.push({platform: p, error: e.message}); }
-            }
-            return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-         } catch(e:any) { return { content: [{ type: "text", text: `Error: ${e.message}` }] }; }
+        try {
+          const email = await this.getLinkedUser();
+          if (!email) return { content: [{ type: "text", text: "Error: Login required." }], isError: true };
+
+          const userStub = this.getUserStub(email);
+          const response = await userStub.fetch("http://internal/internal/get-tokens");
+          const tokens = await response.json() as Record<string, string>;
+
+          const result: any[] = [];
+          for (const p of platforms) {
+            const token = tokens[p];
+            if (!token) { result.push({ platform: p, error: "Missing token" }); continue; }
+            try {
+              const platform = PlatformManager.getPlatform(p as any);
+              await platform.deletePost(token, postId);
+              result.push({ platform: p, success: true });
+            } catch (e: any) { result.push({ platform: p, error: e.message }); }
+          }
+          return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        } catch (e: any) { return { content: [{ type: "text", text: `Error: ${e.message}` }] }; }
       }
     );
   }
 }
 
-// Global Routing Handler
-// Includes: Persistent Session Logic via ?userId=
-async function handleTokenStatus(request: Request, env: any) {
-    const url = new URL(request.url);
-    const sessionKey = url.searchParams.get("session");
-    if (!sessionKey) return new Response(JSON.stringify({ error: "No session key" }), { status: 400 });
-    
-    // Check Session DO
-    const id = env.MCP_OBJECT.idFromName(sessionKey);
-    const stub = env.MCP_OBJECT.get(id);
-    const response = await stub.fetch("http://internal/internal/get-config");
-    
-    if(!response.ok) return new Response(JSON.stringify({}), { status: 200 }); // Return empty if new session
-    
-    const config = await response.json() as Config;
-    const status = {
-        hashnode: !!(config.tokens?.hashnode),
-        devto: !!(config.tokens?.devto),
-        wordpress: !!(config.tokens?.wordpress)
-    };
-    return new Response(JSON.stringify(status), { headers: { 'Content-Type': 'application/json' }});
-}
-
-async function handleSaveToken(request: Request, env: any) {
-    const url = new URL(request.url);
-    const sessionKey = url.searchParams.get("session");
-    
-    if (!sessionKey) return new Response(JSON.stringify({ error: "No session key" }), { status: 400 });
-
-    try {
-        // Fix: Read body once
-        const body = await request.text(); // Read raw text to clone it
-        
-        const id = env.MCP_OBJECT.idFromName(sessionKey);
-        const stub = env.MCP_OBJECT.get(id);
-        
-        // Forward to NEW internal handler
-        const response = await stub.fetch("http://internal/internal/save-token", {
-             method: "POST",
-             body: body, // Reuse body string
-             headers: { 'Content-Type': 'application/json' }
-        });
-        
-        return response;
-
-    } catch(e:any) { return new Response(JSON.stringify({ error: e.message }), { status: 500 }); }
-}
-
-async function handleDeleteToken(request: Request, env: any) {
-     const url = new URL(request.url);
-     const sessionKey = url.searchParams.get("session");
-     if (!sessionKey) return new Response(JSON.stringify({ error: "No session key" }), { status: 400 });
-     
-     // Extract platform from URL path: /api/tokens/hashnode
-     const parts = url.pathname.split('/');
-     const platform = parts[parts.length - 1]; // last segment
-
-     const id = env.MCP_OBJECT.idFromName(sessionKey);
-     const stub = env.MCP_OBJECT.get(id);
-     
-     // Forward to internal delete handler
-     return stub.fetch(`http://internal/internal/delete-token?platform=${platform}`, {
-         method: "POST" // Internal usage
-     });
-}
-
+// --- Worker Fetch Handler ---
 
 export default {
-  async fetch(request: Request, env: any, ctx: ExecutionContext) {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
 
-    if(url.pathname === "/") {
-      return new Response(demoHtml, {
-        headers: { 'Content-Type': 'text/html', 'Cache-Control': 'public, max-age=3600' }
+    // 1. Login Page
+    if (url.pathname === "/login") {
+      return new Response(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+               <title>BlogCaster Login</title>
+               <script src="https://cdn.tailwindcss.com"></script>
+            </head>
+            <body class="bg-gray-50 flex items-center justify-center min-h-screen">
+               <div class="bg-white p-8 rounded shadow-md max-w-sm w-full">
+                  <h1 class="text-xl font-bold mb-4">Login to BlogCaster</h1>
+                  <form action="/api/auth/send-link" method="POST" onsubmit="event.preventDefault(); sendLink(this)">
+                     <input type="hidden" name="connect_id" value="${url.searchParams.get("connect_id") || ''}" />
+                     <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700">Email</label>
+                        <input type="email" name="email" required class="mt-1 block w-full px-3 py-2 border rounded" placeholder="you@example.com">
+                     </div>
+                     <button type="submit" class="w-full bg-black text-white py-2 rounded">Send Login Link</button>
+                  </form>
+                  <p id="status" class="mt-4 text-center text-sm text-gray-600"></p>
+               </div>
+               <script>
+                 async function sendLink(form) {
+                    const btn = form.querySelector('button');
+                    btn.disabled = true;
+                    btn.innerText = "Sending...";
+                    const formData = new FormData(form);
+                    try {
+                      const res = await fetch('/api/auth/send-link', {
+                          method: 'POST',
+                          body: JSON.stringify(Object.fromEntries(formData)),
+                          headers: {'Content-Type': 'application/json'}
+                      });
+                      const data = await res.json();
+                      if (data.verifyUrl) {
+                          // Auto-redirect simulation
+                          window.location.href = data.verifyUrl;
+                          return;
+                      }
+                      document.getElementById('status').innerText = data.message || data.error;
+                      btn.innerText = "Sent";
+                    } catch (e) {
+                      document.getElementById('status').innerText = "Error sending link";
+                      btn.disabled = false;
+                      btn.innerText = "Send Magic Link";
+                    }
+                 }
+               </script>
+            </body>
+          </html>
+        `, { headers: { 'Content-Type': 'text/html' } });
+    }
+
+    // 2. Auth API: Send Login Link
+    if (url.pathname === "/api/auth/send-link" && request.method === "POST") {
+      try {
+        const { email, connect_id } = await request.json() as any;
+        if (!email) throw new Error("Email required");
+
+        const secret = env.MAGIC_LINK_SECRET || "dev-secret-unsafe";
+        const token = await signLoginToken(email, secret);
+
+        const verifyUrl = `${url.origin}/verify?token=${encodeURIComponent(token)}&connect_id=${encodeURIComponent(connect_id || '')}`;
+
+        console.log("Login Link:", verifyUrl);
+
+        let message = `Login link sent to ${email} (Check server logs in dev)`;
+
+        if (env.RESEND_API_KEY) {
+          try {
+            await sendLoginEmail(email, verifyUrl, env.RESEND_API_KEY);
+            message = `Login link sent to ${email} (Check your inbox)`;
+          } catch (err: any) {
+            console.error("Email failed:", err);
+            message = `Failed to send email: ${err.message}. Link logged to console.`;
+          }
+        }
+
+        return new Response(JSON.stringify({
+          success: true,
+          message: message,
+          verifyUrl: verifyUrl // Return for auto-redirect
+        }), { headers: { 'Content-Type': 'application/json' } });
+      } catch (e: any) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 400 });
+      }
+    }
+
+    // 3. Verify Login Link
+    if (url.pathname === "/verify") {
+      const token = url.searchParams.get("token");
+      const connect_id = url.searchParams.get("connect_id");
+
+      if (!token) return new Response("Missing token", { status: 400 });
+
+      const secret = env.MAGIC_LINK_SECRET || "dev-secret-unsafe";
+      const email = await verifyLoginToken(token, secret);
+
+      if (!email) return new Response("Invalid or expired token", { status: 403 });
+
+      const userId = env.USER_OBJECT.idFromName(email);
+      const userStub = env.USER_OBJECT.get(userId);
+      await userStub.fetch("http://internal/internal/init", {
+        method: "POST",
+        body: JSON.stringify({ email, id: email }),
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const cookie = `auth_user=${email}; HttpOnly; Secure; SameSite=Lax; Path=/`;
+
+      if (connect_id) {
+        await userStub.fetch("http://internal/internal/link-session", {
+          method: "POST",
+          body: JSON.stringify({ sessionId: connect_id }),
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        try {
+          const sessionId = env.MCP_OBJECT.idFromString(connect_id);
+          const sessionStub = env.MCP_OBJECT.get(sessionId);
+          await sessionStub.fetch("http://internal/internal/link-user", {
+            method: "POST",
+            body: JSON.stringify({ email }),
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } catch (e) {
+          console.error("Failed to link session", e);
+        }
+      }
+
+      return new Response(null, {
+        status: 302,
+        headers: {
+          'Set-Cookie': cookie,
+          'Location': '/dashboard'
+        }
       });
     }
 
-    // Token Management UI
-    if (url.pathname === "/tokens") {
-         const sessionKey = url.searchParams.get("session");
-         return new Response(tokenPageHtml(sessionKey || ""), { headers: {'Content-Type': 'text/html'} });
+    // 4. Dashboard (Protected)
+    if (url.pathname === "/dashboard" || url.pathname === "/tokens") {
+      const cookie = request.headers.get("Cookie");
+      const email = cookie?.match(/auth_user=([^;]+)/)?.[1];
+
+      if (!email) {
+        return new Response(null, { status: 302, headers: { 'Location': '/login' } });
+      }
+
+      return new Response(tokenPageHtml("") /* No session key needed */, {
+        headers: { 'Content-Type': 'text/html' }
+      });
     }
-    
-    // API Routes (Forwarding to Session DOs)
-    if (url.pathname.startsWith("/api/tokens")) {
-        if (request.method === "GET" && url.pathname === "/api/tokens/status") return handleTokenStatus(request, env);
-        if (request.method === "POST" && url.pathname === "/api/tokens") return handleSaveToken(request, env);
-        if (request.method === "DELETE") return handleDeleteToken(request, env);
+
+    // 5. User API (Protected)
+    if (url.pathname.startsWith("/api/user") || url.pathname.startsWith("/api/tokens")) {
+      const cookie = request.headers.get("Cookie");
+      const email = cookie?.match(/auth_user=([^;]+)/)?.[1];
+      if (!email) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+
+      const userId = env.USER_OBJECT.idFromName(email);
+      const userStub = env.USER_OBJECT.get(userId);
+
+      if (url.pathname === "/api/user/me") {
+        const res = await userStub.fetch("http://internal/internal/get-profile");
+        return res;
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/tokens/status") {
+        const tRes = await userStub.fetch("http://internal/internal/get-tokens");
+        const tokens = await tRes.json() as Record<string, string>;
+        const status = {
+          hashnode: !!tokens.hashnode,
+          devto: !!tokens.devto,
+          wordpress: !!tokens.wordpress
+        };
+        return new Response(JSON.stringify(status), { headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/tokens") {
+        const body = await request.text();
+        return userStub.fetch("http://internal/internal/save-token", {
+          method: "POST",
+          body,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (request.method === "DELETE" && url.pathname.startsWith("/api/tokens/")) {
+        const parts = url.pathname.split('/');
+        const platform = parts[parts.length - 1];
+        return userStub.fetch("http://internal/internal/delete-token", {
+          method: "POST",
+          body: JSON.stringify({ platform }),
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // 6. Logout
+    if (url.pathname === "/logout") {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          'Set-Cookie': 'auth_user=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0',
+          'Location': '/login'
+        }
+      });
     }
 
     // MCP & SSE Routes
     if (url.pathname === "/sse" || url.pathname === "/sse/message") {
-       return MyMCP.serveSSE("/sse").fetch(request, env, ctx);
+      return MyMCP.serveSSE("/sse").fetch(request, env, ctx);
     }
     if (url.pathname === "/mcp") {
-       return MyMCP.serve("/mcp").fetch(request, env, ctx);
+      return MyMCP.serve("/mcp").fetch(request, env, ctx);
+    }
+
+    // Root
+    if (url.pathname === "/") {
+      return new Response(demoHtml, {
+        headers: { 'Content-Type': 'text/html', 'Cache-Control': 'public, max-age=3600' }
+      });
     }
 
     return new Response("Not found", { status: 404 });

@@ -20,6 +20,12 @@
 				"MyMCP"
 			],
 			"tag": "v1"
+		},
+		{
+			"new_classes": [
+				"UserDO"
+			],
+			"tag": "v2"
 		}
 	],
 	"durable_objects": {
@@ -27,19 +33,22 @@
 			{
 				"class_name": "MyMCP",
 				"name": "MCP_OBJECT"
+			},
+			{
+				"class_name": "UserDO",
+				"name": "USER_OBJECT"
 			}
 		]
 	},
 	// KV namespace for storing tokens
 	"kv_namespaces": [
 		{
-		  "binding": "BlogMCP",
-		  "id": "6763272ea4f046b2895ddfb78191296a",
-		  
-		  // Optional: preview_id used when running `wrangler dev` for local dev
-		  "preview_id": "6763272ea4f046b2895ddfb78191296a"
+			"binding": "BlogMCP",
+			"id": "6763272ea4f046b2895ddfb78191296a",
+			// Optional: preview_id used when running `wrangler dev` for local dev
+			"preview_id": "6763272ea4f046b2895ddfb78191296a"
 		}
-	  ],
+	],
 	"observability": {
 		"enabled": true
 	}
