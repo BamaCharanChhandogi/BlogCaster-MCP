@@ -1,7 +1,6 @@
 {
 	"name": "blogcaster-mcp",
-	"version": "0.0.0",
-	"private": true,
+	"version": "1.0.0",
 	"mcpName": "io.github.BamaCharanChhandogi/blogcaster-mcp",
 	"scripts": {
 		"deploy": "wrangler deploy",
