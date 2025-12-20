@@ -3,12 +3,12 @@
     "name": "io.github.BamaCharanChhandogi/blogcaster-mcp",
     "title": "BlogCaster MCP",
     "description": "An MCP server for the BlogCaster project.",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "packages": [
         {
             "registryType": "npm",
             "identifier": "blogcaster-mcp",
-            "version": "1.0.0",
+            "version": "1.0.1",
             "transport": {
                 "type": "stdio"
             }

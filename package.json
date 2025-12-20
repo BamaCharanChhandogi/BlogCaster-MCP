@@ -1,7 +1,31 @@
 {
 	"name": "blogcaster-mcp",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"mcpName": "io.github.BamaCharanChhandogi/blogcaster-mcp",
+	"description": "An MCP server for the BlogCaster project - publish, list, and delete posts across multiple blogging platforms",
+	"main": "src/index.ts",
+	"files": [
+		"src",
+		"public",
+		"server.json",
+		"README.md",
+		"wrangler.jsonc"
+	],
+	"keywords": [
+		"mcp",
+		"model-context-protocol",
+		"blog",
+		"hashnode",
+		"devto",
+		"wordpress",
+		"publishing"
+	],
+	"author": "BamaCharanChhandogi",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/BamaCharanChhandogi/BlogCaster-MCP.git"
+	},
 	"scripts": {
 		"deploy": "wrangler deploy",
 		"dev": "wrangler dev",
