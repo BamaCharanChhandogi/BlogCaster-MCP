@@ -13,5 +13,11 @@
                 "type": "stdio"
             }
         }
+    ],
+    "remotes": [
+        {
+            "type": "streamable-http",
+            "url": "https://blogcaster-mcp.rrpb2580.workers.dev/mcp"
+        }
     ]
 }
