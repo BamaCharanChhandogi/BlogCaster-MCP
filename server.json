@@ -1,0 +1,17 @@
+{
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+    "name": "io.github.BamaCharanChhandogi/blogcaster-mcp",
+    "title": "BlogCaster MCP",
+    "description": "An MCP server for the BlogCaster project.",
+    "version": "1.0.0",
+    "packages": [
+        {
+            "registryType": "npm",
+            "identifier": "blogcaster-mcp",
+            "version": "1.0.0",
+            "transport": {
+                "type": "stdio"
+            }
+        }
+    ]
+}
